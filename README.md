@@ -57,7 +57,8 @@ Example:
   LOGIN_PASSWORD=\"test\" \\
   GIT_REPO=\"repo_url\" \\
   SSH_KEY_FILE=\"~/.ssh/id_ed25519\" \\
-  DOCKER_BUILD_ARGS=\"--no-cache --pull --progress=plain\"\n+```
+  DOCKER_BUILD_ARGS=\"--no-cache --pull --progress=plain\"
+```
 
 ## Environment variables
 - `GIT_REPO`, `GIT_BRANCH`
@@ -74,3 +75,46 @@ Example:
 - The script removes `'throttle:60,1',` from `laravel/app/Http/Kernel.php` in the cloned repo before building.
 - Compose file detection supports `compose.yml`, `docker-compose.yml`, and `.yaml` variants.
 - `mysql` service name is assumed to be `mysql`.
+
+## Odoo benchmark (Ansible)
+This uses `odoo-playbook.yml` via `run-local.sh` and runs:
+- Docker install + Odoo deploy
+- `hey` load test on `/shop` (raw output only)
+- Locust load test with CSV + HTML report
+- `docker compose down`
+
+### Required archives and names
+Place these files **under `odoo/`** in this repo:
+- `odoo/odoo_bundle.tar.gz` — the Odoo project **root** (docker-compose, configs, scripts, locustfile, etc.)
+- `odoo/data.tar.gz` — **backup data**, must contain `filestore/` and `postgres/`
+
+### How to build the archives
+1. **Odoo bundle** (project root):
+```bash
+# from repo root
+tar -czf odoo/odoo_bundle.tar.gz -C odoo .
+```
+If you want to exclude an existing `data/` folder from the bundle:
+```bash
+tar -czf odoo/odoo_bundle.tar.gz -C odoo . --exclude=./data --exclude=./data.tar.gz
+```
+
+2. **Data backup** (filestore + postgres):
+```bash
+# adjust the source path to where your Odoo data lives
+tar -czf odoo/data.tar.gz -C /path/to/odoo/data filestore postgres
+```
+
+The playbook expects these **exact names**: `odoo_bundle.tar.gz` and `data.tar.gz`.
+
+### Run
+```bash
+./run-local.sh odoo ip=1.2.3.4
+```
+
+### Outputs
+Stored locally under `results/<hostname>/`:
+- `odoo_hey_raw_<timestamp>.txt`
+- `odoo_locust_stats_<timestamp>.csv`
+- `odoo_locust_failures_<timestamp>.csv`
+- `odoo_locust_report_<timestamp>.html` and `odoo_locust_report.html`

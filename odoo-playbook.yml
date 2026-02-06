@@ -1,0 +1,377 @@
+---
+- name: Deploy Odoo stack remotely
+  hosts: "{{ target_host }}"
+  become: "{{ (ssh_user | default('')) != 'root' }}"
+  gather_facts: true
+
+  vars:
+    ansible_user: "{{ ssh_user | default(omit) }}"
+    ansible_ssh_pass: "{{ ssh_pass | default(omit) }}"
+    ansible_become_pass: "{{ sudo_pass | default(omit) }}"
+
+    odoo_root: /root/odoo
+    odoo_data_dir: /root/odoo/data
+    odoo_data_archive_local: odoo/data.tar.gz
+    odoo_data_archive_remote: /root/odoo_data.tar.gz
+    odoo_bundle_local: odoo/odoo_bundle.tar.gz
+    odoo_bundle_remote: /root/odoo_bundle.tar.gz
+    odoo_base_url: http://127.0.0.1:8069
+    hey_requests: 2000
+    hey_concurrency: 10
+    hey_timeout: 20
+    hey_report_raw_remote: "/root/odoo/hey_shop_raw_{{ ansible_date_time.iso8601_basic }}.txt"
+    locust_users: 50
+    locust_spawn_rate: 5
+    locust_duration: "30s"
+    locust_dir: /root/odoo/locust
+    locust_report_prefix: "/root/odoo/locust/locust_{{ ansible_date_time.iso8601_basic }}"
+
+  tasks:
+    - name: Install prerequisite packages
+      apt:
+        name:
+          - ca-certificates
+          - curl
+          - gnupg
+          - file
+          - gzip
+          - bzip2
+          - xz-utils
+          - zstd
+          - hey
+        state: present
+        update_cache: true
+
+    - name: Ensure apt keyring directory
+      file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: '0755'
+
+    - name: Add Docker GPG key (Ubuntu)
+      get_url:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        dest: /etc/apt/keyrings/docker.asc
+        mode: '0644'
+      when: ansible_distribution == "Ubuntu"
+
+    - name: Add Docker GPG key (Debian)
+      get_url:
+        url: https://download.docker.com/linux/debian/gpg
+        dest: /etc/apt/keyrings/docker.asc
+        mode: '0644'
+      when: ansible_distribution == "Debian"
+
+    - name: Add Docker apt repo (Ubuntu)
+      apt_repository:
+        repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+        filename: docker
+        state: present
+      when: ansible_distribution == "Ubuntu"
+
+    - name: Add Docker apt repo (Debian)
+      apt_repository:
+        repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian {{ ansible_distribution_release }} stable"
+        filename: docker
+        state: present
+      when: ansible_distribution == "Debian"
+
+    - name: Install Docker Engine + Compose plugin
+      apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
+        state: present
+        update_cache: true
+
+    - name: Ensure Docker service running
+      service:
+        name: docker
+        state: started
+        enabled: true
+
+
+    - name: Copy Odoo bundle to remote
+      copy:
+        src: "{{ odoo_bundle_local }}"
+        dest: "{{ odoo_bundle_remote }}"
+        mode: '0644'
+
+    - name: Check local data archive exists (required)
+      delegate_to: localhost
+      become: false
+      stat:
+        path: "{{ odoo_data_archive_local }}"
+      register: odoo_data_local_stat
+
+    - name: Fail if local data archive missing
+      delegate_to: localhost
+      become: false
+      fail:
+        msg: "Local data archive not found: {{ odoo_data_archive_local }}"
+      when: not odoo_data_local_stat.stat.exists
+
+    - name: Copy Odoo data archive to remote
+      copy:
+        src: "{{ odoo_data_archive_local }}"
+        dest: "{{ odoo_data_archive_remote }}"
+        mode: '0644'
+
+    - name: Remove existing Odoo dir
+      file:
+        path: "{{ odoo_root }}"
+        state: absent
+
+    - name: Extract Odoo bundle on remote
+      unarchive:
+        src: "{{ odoo_bundle_remote }}"
+        dest: /root
+        remote_src: true
+
+    - name: Remove macOS metadata files
+      shell: |
+        find {{ odoo_root }} -name '._*' -delete
+        find {{ odoo_root }} -name '.DS_Store' -delete
+
+    - name: Ensure Odoo data dir
+      file:
+        path: "{{ odoo_data_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: Detect data archive compression
+      shell: |
+        set -e
+        file -b {{ odoo_data_archive_remote }}
+      register: odoo_data_filetype
+      changed_when: false
+
+    - name: Set tar flag based on compression
+      set_fact:
+        odoo_tar_flag: >-
+          {% if 'gzip compressed data' in odoo_data_filetype.stdout %}-z
+          {% elif 'bzip2 compressed data' in odoo_data_filetype.stdout %}-j
+          {% elif 'XZ compressed data' in odoo_data_filetype.stdout %}-J
+          {% elif 'Zstandard compressed data' in odoo_data_filetype.stdout %}--zstd
+          {% elif 'tar archive' in odoo_data_filetype.stdout %}{% else %}unknown{% endif %}
+
+    - name: Fail if archive compression unknown
+      fail:
+        msg: "Unknown data.tar.gz compression: {{ odoo_data_filetype.stdout }}"
+      when: odoo_tar_flag == "unknown"
+
+    - name: Detect data archive layout
+      shell: |
+        set -e
+        if tar {{ odoo_tar_flag }} -tf {{ odoo_data_archive_remote }} | grep -q '^data/filestore/'; then
+          echo data
+        elif tar {{ odoo_tar_flag }} -tf {{ odoo_data_archive_remote }} | grep -q '^filestore/'; then
+          echo root
+        else
+          echo unknown
+        fi
+      register: odoo_data_layout
+      changed_when: false
+
+    - name: Fail if data archive layout is unknown
+      fail:
+        msg: "Unknown data.tar.gz layout. Expected filestore/ and postgres/ at root or under data/."
+      when: odoo_data_layout.stdout == "unknown"
+
+    - name: Set strip components flag
+      set_fact:
+        odoo_strip_flag: "{{ '--strip-components=1' if odoo_data_layout.stdout == 'data' else '' }}"
+
+    - name: Clean Odoo data dir
+      file:
+        path: "{{ odoo_data_dir }}"
+        state: absent
+
+    - name: Recreate Odoo data dir
+      file:
+        path: "{{ odoo_data_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: Extract data archive into odoo/data
+      shell: |
+        set -e
+        tar {{ odoo_tar_flag }} -xf {{ odoo_data_archive_remote }} -C {{ odoo_data_dir }} {% if odoo_strip_flag %}{{ odoo_strip_flag }}{% endif %}
+
+    - name: Remove remote data archive
+      file:
+        path: "{{ odoo_data_archive_remote }}"
+        state: absent
+
+    - name: Remove remote Odoo bundle
+      file:
+        path: "{{ odoo_bundle_remote }}"
+        state: absent
+
+    - name: Verify filestore and postgres directories exist
+      stat:
+        path: "{{ item }}"
+      loop:
+        - "{{ odoo_data_dir }}/filestore"
+        - "{{ odoo_data_dir }}/postgres"
+      register: odoo_data_dirs
+
+    - name: Fail if data directories are missing
+      fail:
+        msg: "Missing {{ item.item }} after data extraction"
+      when: not item.stat.exists
+      loop: "{{ odoo_data_dirs.results }}"
+
+
+    - name: Start Odoo stack
+      command: docker compose up -d
+      args:
+        chdir: "{{ odoo_root }}"
+
+    - name: Wait for Odoo /shop to be reachable
+      uri:
+        url: "{{ odoo_base_url }}/shop"
+        method: GET
+        status_code: 200
+      register: odoo_shop_check
+      retries: 60
+      delay: 2
+      until: odoo_shop_check.status == 200
+
+    - name: Run hey load test on /shop
+      shell: |
+        set -e
+        hey -n {{ hey_requests }} -c {{ hey_concurrency }} -t {{ hey_timeout }} \
+          "{{ odoo_base_url }}/shop" > "{{ hey_report_raw_remote }}" 2>&1
+
+    - name: Ensure local results dir
+      delegate_to: localhost
+      become: false
+      file:
+        path: "results/{{ ansible_hostname }}"
+        state: directory
+        mode: '0755'
+
+    - name: Fetch hey report (raw)
+      fetch:
+        src: "{{ hey_report_raw_remote }}"
+        dest: "results/{{ ansible_hostname }}/odoo_hey_raw_{{ ansible_date_time.iso8601_basic }}.txt"
+        flat: true
+
+
+    - name: Ensure locust dir on remote
+      file:
+        path: "{{ locust_dir }}"
+        state: directory
+        mode: '0777'
+
+    - name: Copy locustfile to remote
+      copy:
+        src: odoo/locustfile.py
+        dest: "{{ locust_dir }}/locustfile.py"
+        mode: '0644'
+
+    - name: Run locust load test on /shop
+      shell: |
+        set -e
+        docker run --rm --network host --user 0:0 \
+          -v {{ locust_dir }}:/mnt/locust \
+          locustio/locust:2.24.1 \
+          -f /mnt/locust/locustfile.py \
+          --headless -u {{ locust_users }} -r {{ locust_spawn_rate }} -t {{ locust_duration }} \
+          --host {{ odoo_base_url }} \
+          --csv /mnt/locust/locust --csv-full-history
+
+    - name: Fetch locust stats
+      fetch:
+        src: "{{ locust_dir }}/locust_stats.csv"
+        dest: "results/{{ ansible_hostname }}/odoo_locust_stats_{{ ansible_date_time.iso8601_basic }}.csv"
+        flat: true
+
+    - name: Fetch locust failures
+      fetch:
+        src: "{{ locust_dir }}/locust_failures.csv"
+        dest: "results/{{ ansible_hostname }}/odoo_locust_failures_{{ ansible_date_time.iso8601_basic }}.csv"
+        flat: true
+
+    - name: Build locust HTML report locally
+      delegate_to: localhost
+      become: false
+      shell: |
+        set -e
+        stats_file="results/{{ ansible_hostname }}/odoo_locust_stats_{{ ansible_date_time.iso8601_basic }}.csv"
+        out_file="results/{{ ansible_hostname }}/odoo_locust_report_{{ ansible_date_time.iso8601_basic }}.html"
+        latest_file="results/{{ ansible_hostname }}/odoo_locust_report.html"
+        python3 - <<'PY'
+        import csv, html, os, textwrap
+        stats_file = os.environ["STATS_FILE"]
+        out_file = os.environ["OUT_FILE"]
+        latest_file = os.environ["LATEST_FILE"]
+
+        with open(stats_file, newline="", encoding="utf-8") as f:
+            rows = list(csv.DictReader(f))
+
+        headers = rows[0].keys() if rows else []
+
+        def row_class(r):
+            if r.get("Type") == "Aggregated":
+                return "agg"
+            return ""
+
+        table_rows = []
+        for r in rows:
+            cells = "".join(f"<td>{html.escape(str(r.get(h, '')))}</td>" for h in headers)
+            table_rows.append(f"<tr class='{row_class(r)}'>{cells}</tr>")
+
+        header_cells = "".join(f"<th>{html.escape(h)}</th>" for h in headers)
+        html_doc = textwrap.dedent("""\
+        <!doctype html>
+        <html>
+        <head>
+          <meta charset="utf-8" />
+          <title>Locust Report</title>
+          <style>
+            body { font-family: Arial, sans-serif; margin: 20px; }
+            table { border-collapse: collapse; width: 100%; font-size: 12px; }
+            th, td { border: 1px solid #ddd; padding: 6px 8px; text-align: left; }
+            th { background: #f4f4f4; position: sticky; top: 0; }
+            tr.agg { background: #fff8dc; font-weight: bold; }
+          </style>
+        </head>
+        <body>
+          <h2>Locust Stats</h2>
+          <p>Source: __SOURCE__</p>
+          <table>
+            <thead><tr>__HEADER__</tr></thead>
+            <tbody>
+              __ROWS__
+            </tbody>
+          </table>
+        </body>
+        </html>
+        """)
+        html_doc = (
+            html_doc
+            .replace("__SOURCE__", html.escape(stats_file))
+            .replace("__HEADER__", header_cells)
+            .replace("__ROWS__", "".join(table_rows))
+        )
+
+        with open(out_file, "w", encoding="utf-8") as f:
+            f.write(html_doc)
+        with open(latest_file, "w", encoding="utf-8") as f:
+            f.write(html_doc)
+        PY
+      environment:
+        STATS_FILE: "results/{{ ansible_hostname }}/odoo_locust_stats_{{ ansible_date_time.iso8601_basic }}.csv"
+        OUT_FILE: "results/{{ ansible_hostname }}/odoo_locust_report_{{ ansible_date_time.iso8601_basic }}.html"
+        LATEST_FILE: "results/{{ ansible_hostname }}/odoo_locust_report.html"
+
+
+    - name: Stop Odoo stack
+      command: docker compose down
+      args:
+        chdir: "{{ odoo_root }}"

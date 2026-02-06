@@ -2,7 +2,7 @@
 set -euo pipefail
 
 usage() {
-  echo "Usage: $0 benchmark [ip=1.2.3.4] [KEY=VALUE ...]" >&2
+  echo "Usage: $0 benchmark|odoo [ip=1.2.3.4] [KEY=VALUE ...]" >&2
   exit 1
 }
 
@@ -11,7 +11,7 @@ usage() {
 cmd="$1"
 shift
 
-if [[ "$cmd" != "benchmark" ]]; then
+if [[ "$cmd" != "benchmark" && "$cmd" != "odoo" ]]; then
   usage
 fi
 
@@ -139,7 +139,7 @@ trap 'rm -f "$vars_file"' EXIT
     echo "sudo_pass: \"$sudo_pass\""
   fi
   echo "bench_env:"
-  for kv in "${extra_kv[@]}"; do
+  for kv in "${extra_kv[@]+${extra_kv[@]}}"; do
     k="${kv%%=*}"
     v="${kv#*=}"
     # Quote as string for YAML
@@ -159,7 +159,12 @@ trap 'rm -f "$vars_file"' EXIT
   fi
 } > "$vars_file"
 
-ansible_cmd=(ansible-playbook -i "$ip," ansible-playbook.yml -e "@$vars_file")
+playbook="ansible-playbook.yml"
+if [[ "$cmd" == "odoo" ]]; then
+  playbook="odoo-playbook.yml"
+fi
+
+ansible_cmd=(ansible-playbook -i "$ip," "$playbook" -e "@$vars_file")
 if [[ -n "$ssh_user" ]]; then
   ansible_cmd+=(-u "$ssh_user")
 fi
