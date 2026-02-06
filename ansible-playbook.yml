@@ -1,0 +1,105 @@
+---
+- name: Run system benchmark remotely
+  hosts: "{{ target_host }}"
+  become: "{{ (ssh_user | default('')) != 'root' }}"
+  gather_facts: true
+  vars:
+    ansible_user: "{{ ssh_user | default(omit) }}"
+    ansible_ssh_pass: "{{ ssh_pass | default(omit) }}"
+    ansible_become_pass: "{{ sudo_pass | default(omit) }}"
+
+    bench_root: /root/bench_runner
+    bench_script: /root/bench_runner/benchmark.sh
+    bench_out: /root/bench_out
+    remote_env_file: /root/bench_runner/.env
+    remote_sql_file: /root/bench_runner/app.sql
+    remote_ssh_key: /root/.ssh/bench_key
+
+  tasks:
+    - name: Ensure bench runner dir
+      file:
+        path: "{{ bench_root }}"
+        state: directory
+        mode: '0755'
+
+    - name: Ensure .ssh dir
+      file:
+        path: /root/.ssh
+        state: directory
+        mode: '0700'
+
+    - name: Copy benchmark script
+      copy:
+        src: ./benchmark.sh
+        dest: "{{ bench_script }}"
+        mode: '0755'
+
+    - name: Copy env file (optional)
+      copy:
+        src: "{{ local_env_file }}"
+        dest: "{{ remote_env_file }}"
+        mode: '0600'
+      when: local_env_file is defined and local_env_file | length > 0
+
+    - name: Copy sql file (optional)
+      copy:
+        src: "{{ local_sql_file }}"
+        dest: "{{ remote_sql_file }}"
+        mode: '0644'
+      when: local_sql_file is defined and local_sql_file | length > 0
+
+    - name: Copy SSH key for git clone (optional)
+      copy:
+        src: "{{ ssh_key_file }}"
+        dest: "{{ remote_ssh_key }}"
+        mode: '0600'
+      when: ssh_key_file is defined and ssh_key_file | length > 0
+
+    - name: Build env for benchmark run
+      set_fact:
+        bench_env_final: >-
+          {{
+            (bench_env | default({}))
+            | combine((local_env_file is defined and local_env_file | length > 0) | ternary({'ENV_FILE': remote_env_file}, {}))
+            | combine((local_sql_file is defined and local_sql_file | length > 0) | ternary({'SQL_FILE': remote_sql_file}, {}))
+            | combine((ssh_key_file is defined and ssh_key_file | length > 0) | ternary({'GIT_SSH_COMMAND': 'ssh -i ' ~ remote_ssh_key ~ ' -o StrictHostKeyChecking=accept-new'}, {}))
+          }}
+
+    - name: Run benchmark
+      command: "{{ bench_script }}"
+      environment: "{{ bench_env_final }}"
+
+    - name: Archive bench_out
+      archive:
+        path: "{{ bench_out }}"
+        dest: "/tmp/bench_out_{{ ansible_hostname }}.tar.gz"
+        format: gz
+
+    - name: Ensure local results dir
+      delegate_to: localhost
+      become: false
+      file:
+        path: "results/{{ ansible_hostname }}"
+        state: directory
+        mode: '0755'
+
+    - name: Fetch bench_out archive
+      fetch:
+        src: "/tmp/bench_out_{{ ansible_hostname }}.tar.gz"
+        dest: "results/{{ ansible_hostname }}/bench_out.tar.gz"
+        flat: true
+
+    - name: Unarchive bench_out locally
+      delegate_to: localhost
+      become: false
+      command: >
+        tar -xzf results/{{ ansible_hostname }}/bench_out.tar.gz
+        -C results/{{ ansible_hostname }}
+        --strip-components=1
+
+    - name: Remove bench_out archive locally
+      delegate_to: localhost
+      become: false
+      file:
+        path: "results/{{ ansible_hostname }}/bench_out.tar.gz"
+        state: absent
