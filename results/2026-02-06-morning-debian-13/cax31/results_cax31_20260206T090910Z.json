@@ -1,0 +1,17 @@
+{
+  "host": "cax31",
+  "timestamp_utc": "20260206T090910Z",
+  "cpu_single_eps": 1255.26,
+  "cpu_multi_eps": 10055.06,
+  "ram_mib_s": 4527.40,
+  "disk_read_iops": 38101.356531,
+  "disk_write_iops": 16399.526714,
+  "docker_build_seconds": 619,
+  "web_test_count": 2000,
+  "web_test_avg_seconds": 0.0514,
+  "web_test_p95_seconds": 0.0764,
+  "web_test_fastest_seconds": 0.0342,
+  "web_test_slowest_seconds": 0.1081,
+  "web_test_total_seconds": 10.5290,
+  "web_test_hey_output": "/root/bench_out/hey_cax31_20260206T090910Z.txt"
+}

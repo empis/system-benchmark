@@ -1,0 +1,14 @@
+{
+  "host": "cpx42",
+  "timestamp_utc": "20260205T164411Z",
+  "cpu_single_eps": 1605.82,
+  "cpu_multi_eps": 11664.64,
+  "ram_mib_s": 6164.21,
+  "disk_read_iops": 47091.927205,
+  "disk_write_iops": 20258.616092,
+  "docker_build_seconds": 513,
+  "web_test_count": 200,
+  "web_test_avg_seconds": 0.0421,
+  "web_test_p95_seconds": 0.0753,
+  "web_test_hey_output": "/root/bench_out/hey_cpx42_20260205T164411Z.txt"
+}

@@ -1,0 +1,17 @@
+{
+  "host": "cx53",
+  "timestamp_utc": "20260206T125823Z",
+  "cpu_single_eps": 1414.85,
+  "cpu_multi_eps": 22461.54,
+  "ram_mib_s": 5407.18,
+  "disk_read_iops": 37621.058596,
+  "disk_write_iops": 16189.487368,
+  "docker_build_seconds": 513,
+  "web_test_count": 2000,
+  "web_test_avg_seconds": 0.0343,
+  "web_test_p95_seconds": 0.0421,
+  "web_test_fastest_seconds": 0.0247,
+  "web_test_slowest_seconds": 0.0732,
+  "web_test_total_seconds": 6.9680,
+  "web_test_hey_output": "/root/bench_out/hey_cx53_20260206T125823Z.txt"
+}

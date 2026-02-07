@@ -1,0 +1,14 @@
+{
+  "host": "cax31",
+  "timestamp_utc": "20260205T161151Z",
+  "cpu_single_eps": 1260.74,
+  "cpu_multi_eps": 10053.17,
+  "ram_mib_s": 4506.85,
+  "disk_read_iops": 44321.011933,
+  "disk_write_iops": 19067.062196,
+  "docker_build_seconds": 623,
+  "web_test_count": 200,
+  "web_test_avg_seconds": 0.0537,
+  "web_test_p95_seconds": 0.0754,
+  "web_test_hey_output": "/root/bench_out/hey_cax31_20260205T161151Z.txt"
+}

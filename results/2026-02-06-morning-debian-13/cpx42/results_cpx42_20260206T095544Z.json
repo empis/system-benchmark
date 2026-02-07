@@ -1,0 +1,17 @@
+{
+  "host": "cpx42",
+  "timestamp_utc": "20260206T095544Z",
+  "cpu_single_eps": 1652.63,
+  "cpu_multi_eps": 13215.27,
+  "ram_mib_s": 6572.05,
+  "disk_read_iops": 55864.642357,
+  "disk_write_iops": 24016.398907,
+  "docker_build_seconds": 504,
+  "web_test_count": 2000,
+  "web_test_avg_seconds": 0.0278,
+  "web_test_p95_seconds": 0.0442,
+  "web_test_fastest_seconds": 0.0167,
+  "web_test_slowest_seconds": 0.0995,
+  "web_test_total_seconds": 5.9629,
+  "web_test_hey_output": "/root/bench_out/hey_cpx42_20260206T095544Z.txt"
+}

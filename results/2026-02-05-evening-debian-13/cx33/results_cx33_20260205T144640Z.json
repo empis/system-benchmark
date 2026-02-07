@@ -1,0 +1,14 @@
+{
+  "host": "cx33",
+  "timestamp_utc": "20260205T144640Z",
+  "cpu_single_eps": 1409.49,
+  "cpu_multi_eps": 5636.58,
+  "ram_mib_s": 5262.56,
+  "disk_read_iops": 37047.130191,
+  "disk_write_iops": 15945.203653,
+  "docker_build_seconds": 521,
+  "web_test_count": 200,
+  "web_test_avg_seconds": 0.1019,
+  "web_test_p95_seconds": 0.1605,
+  "web_test_hey_output": "/root/bench_out/hey_cx33_20260205T144640Z.txt"
+}

@@ -1,0 +1,14 @@
+{
+  "host": "ccx13",
+  "timestamp_utc": "20260205T165858Z",
+  "cpu_single_eps": 1664.22,
+  "cpu_multi_eps": 1807.62,
+  "ram_mib_s": 6641.46,
+  "disk_read_iops": 57104.526365,
+  "disk_write_iops": 24548.830078,
+  "docker_build_seconds": 510,
+  "web_test_count": 200,
+  "web_test_avg_seconds": 0.1534,
+  "web_test_p95_seconds": 0.1851,
+  "web_test_hey_output": "/root/bench_out/hey_ccx13_20260205T165858Z.txt"
+}
