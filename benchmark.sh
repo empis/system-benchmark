@@ -14,7 +14,7 @@ export LANG=C
 #   RUN_APP_TESTS=1 ENV_FILE=/path/.env SQL_FILE=/path/db.sql \
 #   LOGIN_EMAIL="user@example.com" LOGIN_PASSWORD="secret" \
 #   API_BASE_URL="http://127.0.0.1:8081" \
-#   GIT_REPO="https://gitlab.com/ermaan/is" \
+#   GIT_REPO="https://gitlab.com/xy" \
 #   DOCKER_BUILD_ARGS="--no-cache --pull --progress=plain" \
 #   bash bench-min.sh
 
@@ -33,7 +33,7 @@ HEY_REQUESTS="${HEY_REQUESTS:-2000}"
 HEY_CONCURRENCY="${HEY_CONCURRENCY:-10}"
 HEY_TIMEOUT="${HEY_TIMEOUT:-20}"
 HEY_VERBOSE="${HEY_VERBOSE:-0}"
-LOG_SAMPLE_RESPONSE="${LOG_SAMPLE_RESPONSE:-1}"
+LOG_SAMPLE_RESPONSE="${LOG_SAMPLE_RESPONSE:-0}"
 ENV_FILE="${ENV_FILE:-}"
 SQL_FILE="${SQL_FILE:-}"
 API_BASE_URL="${API_BASE_URL:-http://127.0.0.1:8081}"
@@ -54,7 +54,7 @@ TS="$(date -u +%Y%m%dT%H%M%SZ)"
 HOST="$(hostname)"
 JSON="$OUTDIR/results_${HOST}_${TS}.json"
 HEY_OUT_FILE="$OUTDIR/hey_${HOST}_${TS}.txt"
-ORDERS_SAMPLE_FILE="$OUTDIR/endp_sample_${HOST}_${TS}.json"
+ENDP_SAMPLE_FILE="$OUTDIR/endp_sample_${HOST}_${TS}.json"
 BENCH_LOG_FILE="${BENCH_LOG_FILE:-$OUTDIR/bench_${HOST}_${TS}.log}"
 
 # Log all output to file while keeping console output
@@ -503,8 +503,8 @@ web_tests() {
   echo "[→] Web tests on /api/orders (hey)" >&2
 
   if [[ "$LOG_SAMPLE_RESPONSE" == "1" ]]; then
-    curl -sS -H 'Accept: application/json, text/plain, */*' "$good_url" >"$ORDERS_SAMPLE_FILE" || true
-    echo "[→] Saved sample response: $ORDERS_SAMPLE_FILE" >&2
+    curl -sS -H 'Accept: application/json, text/plain, */*' "$good_url" >"$ENDP_SAMPLE_FILE" || true
+    echo "[→] Saved sample response: $ENDP_SAMPLE_FILE" >&2
   fi
 
   if command -v hey >/dev/null 2>&1; then

@@ -20,7 +20,7 @@ Minimal VPS benchmark script with optional Docker app build + API tests.
 
 ## Basic usage
 ```bash
-GIT_REPO="https://gitlab.com/ermaan/is" \
+GIT_REPO="https://gitlab.com/xy" \
 DOCKER_BUILD_ARGS="--no-cache --pull --progress=plain" \
 ./benchmark.sh
 ```
@@ -30,11 +30,11 @@ DOCKER_BUILD_ARGS="--no-cache --pull --progress=plain" \
 RUN_APP_TESTS=1 \
 MYSQL_ONLY_FIRST=1 \
 ENV_FILE="/path/to/.env" \
-SQL_FILE="/path/to/is_sql.sql" \
+SQL_FILE="/path/to/sql.sql" \
 LOGIN_EMAIL="user@example.com" \
 LOGIN_PASSWORD="secret" \
 API_BASE_URL="http://127.0.0.1:8081" \
-GIT_REPO="IS REPO" \
+GIT_REPO="BENCH REPO" \
 DOCKER_BUILD_ARGS="--no-cache --pull --progress=plain" \
 ./benchmark.sh
 ```
@@ -42,7 +42,6 @@ DOCKER_BUILD_ARGS="--no-cache --pull --progress=plain" \
 ## Outputs
 - JSON results: `/root/bench_out/results_<host>_<timestamp>.json`
 - `hey` output: `/root/bench_out/hey_<host>_<timestamp>.txt`
-- Sample `/api/orders` response: `/root/bench_out/endp_sample_<host>_<timestamp>.json`
 
 ## Ansible runner
 Run everything on a remote host and fetch results to `results/<hostname>`.
@@ -69,7 +68,6 @@ Example:
 - `ENV_FILE`, `SQL_FILE`
 - `API_BASE_URL`, `LOGIN_EMAIL`, `LOGIN_PASSWORD`
 - `HEY_REQUESTS`, `HEY_CONCURRENCY`, `HEY_TIMEOUT`, `HEY_VERBOSE`
-- `LOG_SAMPLE_RESPONSE` (0/1)
 
 ## Notes
 - The script removes `'throttle:60,1',` from `laravel/app/Http/Kernel.php` in the cloned repo before building.

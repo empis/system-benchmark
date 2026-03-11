@@ -1,3 +1,4 @@
 .env
 *.sql
 .DS_Store
+odoo/*.tar.gz
